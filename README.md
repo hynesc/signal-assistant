@@ -36,7 +36,6 @@ Follow [SETUP.md](SETUP.md) to create the container, register and verify your nu
 | [Setup](SETUP.md) | Account registration, transport checks, Ollama, groups, and troubleshooting. |
 | [Configuration](CONFIGURATION.md) | All settings, paths, persona templates, and data handling. |
 | [Architecture](ARCHITECTURE.md) | Components, message flow, and concurrency. |
-| [Publishing](PUBLISHING.md) | First GitHub push. |
 
 ## Commands
 
