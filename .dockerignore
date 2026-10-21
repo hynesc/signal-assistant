@@ -1,0 +1,12 @@
+.git
+.env
+.env.*
+contacts.json
+signal-data*
+*.log
+.bot.pid
+.venv
+venv
+__pycache__
+dist
+build

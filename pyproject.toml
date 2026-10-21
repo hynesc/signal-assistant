@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "signal-assistant"
+version = "0.1.0"
+description = "Configurable Signal assistant backed by signal-cli and local Ollama inference"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "requests>=2.31,<3",
+]
+
+[tool.setuptools]
+include-package-data = false
+
+[tool.setuptools.packages.find]
+include = ["signal_bot*"]
+
+[tool.setuptools.package-data]
+signal_bot = ["personas/*/system.txt", "personas/*/roles/*.txt"]
+
+[project.urls]
+Repository = "https://github.com/hynesc/signal-assistant"
+Issues = "https://github.com/hynesc/signal-assistant/issues"
