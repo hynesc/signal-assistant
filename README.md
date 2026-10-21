@@ -63,10 +63,10 @@ Send these from an administrator account, using the configured prefix (default `
 | `temp <value>` | Set the chat's temperature. |
 | `mute` / `unmute` | Disable or enable replies in the chat. |
 | `status` | Show effective settings. |
-| `persona assistant` | Switch the application-wide persona. |
+| `persona <name>` | Switch the application-wide persona. |
 | `clearall` | Clear all in-memory history and chat settings. |
 
-To add a persona, create `signal_bot/personas/<name>/system.txt`. Optional role templates live under its `roles/` directory. Persona changes are application-wide; model, temperature, and mute settings are chat-scoped.
+For example, `/bot persona assistant` selects the included `assistant` persona. To add a persona, create `signal_bot/personas/<name>/system.txt`. Optional role templates live under its `roles/` directory. Persona changes are application-wide; model, temperature, and mute settings are chat-scoped.
 
 ## Data handling and limits
 
