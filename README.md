@@ -6,7 +6,7 @@ This public edition includes a neutral assistant persona and fictional contacts.
 
 ## Features
 
-- Replies to direct messages and explicitly mentioned group messages.
+- Replies to direct messages and group messages triggered by mentions or a command prefix.
 - Serializes Signal CLI access and conversation processing while allowing inference across different chats concurrently.
 - Keeps conversation history in memory with rolling summaries and an idle-state expiry.
 - Supports per-chat model, temperature, and mute settings through administrator commands.
@@ -19,61 +19,36 @@ This public edition includes a neutral assistant persona and fictional contacts.
 
 Python 3.10+, Docker, curl, an Ollama server with a downloaded chat model, and an operator-provided Signal account. The lifecycle scripts use Bash on Linux or macOS. Use an account whose messages you intend the bot to process.
 
-## Setup
+## Setup and configuration
 
-Clone the public repository:
+The original deployment registered a **dedicated Signal account and phone number on the server** through the REST API supplied by `bbernhard/signal-cli-rest-api`.
+
+| Guide | Coverage |
+| --- | --- |
+| [SETUP.md](SETUP.md) | Container creation, standalone registration and verification, ACI discovery, transport checks, Ollama, groups, lifecycle, and troubleshooting. |
+| [CONFIGURATION.md](CONFIGURATION.md) | Every environment variable, path, default, state scope, and restart requirement. |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Module map, actual receive/send commands, blocking work, account locking, and persistence. |
+
+Clone and install before following the setup guide:
 
 ```bash
 git clone https://github.com/hynesc/signal-assistant.git
 cd signal-assistant
-```
-
-Run from the project directory:
-
-```bash
 python3 -m venv .venv
 .venv/bin/pip install -e .
 cp .env.example .env
 ```
 
-Edit `.env` and set `BOT_NUMBER` (E.164), `BOT_UUID` (Signal service identifier), and `ADMIN_NUMBERS` (comma-separated E.164 numbers). There are no built-in account or administrator defaults. `OLLAMA_URL` is the full chat endpoint, ending in `/api/chat`. Set `MODEL_ID` to a model installed on your Ollama server.
-
-Optionally copy `contacts.example.json` to `contacts.json` and replace the fictional entries. Contacts are not an access allowlist: the bot responds to any incoming direct message. Only numbers in `ADMIN_NUMBERS` can change settings or use think mode.
-
-Create the container for initial account setup:
-
-```bash
-mkdir -p signal-data
-docker run -d --name signal-assistant-api \
-  -p 127.0.0.1:8080:8080 \
-  -v "$PWD/signal-data:/home/.local/share/signal-cli" \
-  -e MODE=normal -e LOG_LEVEL=warn \
-  bbernhard/signal-cli-rest-api:latest
-```
-
-Link it as a device by opening `http://localhost:8080/v1/qrcodelink?device_name=signal-assistant` and scanning the QR code from Signal's linked-device settings. Registration and verification of a standalone account is another option. Follow the upstream [Signal CLI REST API setup guide](https://github.com/bbernhard/signal-cli-rest-api) for account setup and supported CLI binaries.
-
-With the bot stopped, obtain the account's ACI (service identifier) from your local Signal CLI account metadata or account-management tooling and set `BOT_UUID`. Do not share the account metadata file; it also contains private registration state.
-
-The diagnostics require the account state under `signal-data/data/` to match the configured number and report `registered=true`. Account layouts can vary by upstream version. If diagnostics fail, check the local account state before starting.
+Register and verify your account with the container's REST API, then set `BOT_NUMBER`, `BOT_UUID`, and `ADMIN_NUMBERS`. Once setup is complete:
 
 ```bash
 ./start_bot.sh
 ./stop_bot.sh
 ```
 
-The scripts load `.env` automatically. For diagnostics or a foreground run, export its values first:
+During normal operation the bot runs **CLI receive/send commands through `docker exec`**, sharing the account created through the REST API. Device linking is an alternative setup, not a prerequisite for the dedicated-number arrangement.
 
-```bash
-set -a
-source .env
-set +a
-.venv/bin/python run_bot.py --doctor
-# Or run in the foreground:
-.venv/bin/python run_bot.py
-```
-
-`--doctor` and `--print-config` deliberately display account configuration; do not publish their output.
+Contacts are optional context, not an access allowlist. Use an account whose incoming messages you intend the bot to process. The supplied scripts use a local account mount and port 8080; custom paths or ports must be changed consistently as described in the guides.
 
 ## Commands
 
