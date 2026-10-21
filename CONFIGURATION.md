@@ -1,6 +1,6 @@
 # Configuration reference
 
-Settings are read from the environment when the Python application starts. The lifecycle scripts export `.env` automatically; foreground runs and diagnostics require you to export it first. Restart the application after changing environment settings. `contacts.json` is loaded at startup, and persona templates are loaded at startup or when switched through an administrator command.
+Restart the application after environment changes. Lifecycle scripts load `.env`; export it for foreground runs and diagnostics. Contacts load at startup; persona templates load at startup or when switched.
 
 ## Account, routing, and inference
 
@@ -30,6 +30,17 @@ Contacts are context and tone settings, not an allowlist. Any incoming direct-me
 
 The supplied scripts mount repository `signal-data/` at the container config root and probe `http://localhost:8080/v1/about`. `SIGNAL_DATA_DIR` changes the application's host-side reader only; it does not change the scripts' bind mount or cleanup root. For a custom storage layout, adapt those scripts and the container together rather than changing just one variable. `MODE`, `LOG_LEVEL`, and `AUTO_RECEIVE_SCHEDULE` are upstream container variables; putting them in the bot's `.env` does not reconfigure an already-created container.
 
+## Account storage layout
+
+| Host path | Container view / use |
+| --- | --- |
+| `signal-data/` | Mounted at `/home/.local/share/signal-cli`. |
+| `signal-data/data/accounts.json` | Account index used by readiness checks. |
+| `signal-data/data/<account-path>` | Account state; readiness expects `registered=true`. |
+| `signal-data/data/<account-path>.d/account.db` | Recipient lookup and selected send-log tables. |
+
+These paths depend on the upstream version. Reuse the mount when recreating the container to retain account identity.
+
 ## Concurrency and conversation state
 
 | Variable | Default | Purpose |
@@ -45,6 +56,10 @@ History is a fixed 20-entry deque. A `SUMMARY_EVERY` value above 10 will never r
 
 Ordinary generation uses a temperature of 0.75, or 1.0 for the example `friendly` contact role, unless a chat overrides it. Summarization uses 0.3 and think mode uses 0.6. HTTP timeouts are fixed in code: ordinary/summary requests use 120 seconds, think mode 180 seconds, and search 15 seconds. The CLI send timeout is 60 seconds. These are implementation constants, not extra environment settings.
 
+## Persona templates
+
+Create `signal_bot/personas/<name>/system.txt` with the system prompt. Optional tone overrides go in its `roles/` directory and are selected by a contact's `role` in `contacts.json`. `/bot persona <name>` switches the application-wide persona; `/bot persona assistant` selects the included example. Model, temperature, and mute overrides remain chat-scoped.
+
 ## Private local files
 
 - `.env`: account identifiers, operator settings, and endpoint overrides.
@@ -52,7 +67,11 @@ Ordinary generation uses a temperature of 0.75, or 1.0 for the example `friendly
 - `signal-data/`: registration, cryptographic identity, sessions, and databases.
 - `bot.log` and `.bot.pid`: runtime log and checkout-specific process ID.
 
-Git ignores these files. Do not move private material into example files. `--doctor`, `--print-config`, manual CLI output, and exception logs can reveal local identifiers even though routine message logs omit them.
+Git ignores these files. Keep private material out of examples. `--doctor`, `--print-config`, manual CLI output, and exception logs can expose identifiers despite routine message-log redaction.
+
+Signal encrypts messages in transit; the host handles decrypted messages and sends context to Ollama. Think-mode searches send queries to DuckDuckGo.
+
+The stop script removes `bot.log` and attachments and attempts to clear the SQLite `message_send_log` and `message_send_log_content` tables with `DELETE` and `VACUUM`. Account credentials remain; other tables, upstream logs, backups, and crash output may retain data. This is best-effort housekeeping, not complete history removal or secure erasure. A foreground shutdown does not invoke the stop script.
 
 ## Diagnostics and operation
 

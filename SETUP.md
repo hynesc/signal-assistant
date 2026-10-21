@@ -1,8 +1,8 @@
 # Standalone Signal account setup
 
-The original deployment used a dedicated phone number registered on the server through `bbernhard/signal-cli-rest-api`. This guide follows that arrangement. The API registers a number you already control; it does not provide a phone number. Device linking is an alternative, covered below.
+Register a dedicated number you control through `bbernhard/signal-cli-rest-api`, as in the original server deployment. Obtain the number separately; the API registers it with Signal. Device linking is an alternative below.
 
-The REST API handles initial registration and verification. During normal operation, this application invokes `signal-cli` inside the same container with `docker exec` for receiving and sending. There is no webhook, callback server, REST receive loop, or WebSocket client in the Python bot.
+Runtime messaging uses `signal-cli` through `docker exec`; see [architecture](ARCHITECTURE.md) for the receive/send flow.
 
 ## 1. Install and configure the host application
 
@@ -25,7 +25,7 @@ set +a
 signal_api_url=http://127.0.0.1:8080
 ```
 
-The Python entrypoint does not load `.env` itself. The start and stop scripts do load it.
+The start/stop scripts load `.env`; direct Python commands require the export above.
 
 ## 2. Create the account container
 
@@ -39,7 +39,7 @@ docker run -d --name "$SIGNAL_CONTAINER_NAME" \
 curl -fsS "$signal_api_url/v1/about"
 ```
 
-The host needs Docker access; the Python process calls `docker exec` and reads the mounted account files. Keep the bind mount when recreating the container. It contains the registration, identity keys, sessions, and account database.
+The host user needs Docker access and permission to read the account files. Preserve the bind mount when recreating the container: it holds registration, identity keys, sessions, and the database.
 
 `MODE=normal` avoids a continuously running account daemon. The bot independently selects `signal-cli-native` with `SIGNAL_CLI_BINARY`; if that binary is unavailable on the chosen image/platform, set `SIGNAL_CLI_BINARY=signal-cli`. Check it while the bot is stopped:
 
@@ -49,7 +49,7 @@ docker exec "$SIGNAL_CONTAINER_NAME" "$SIGNAL_CLI_BINARY" --version
 
 Do not use `MODE=json-rpc` or `json-rpc-native` with this direct-CLI implementation. Do not enable `AUTO_RECEIVE_SCHEDULE`: another consumer could remove messages before the bot sees them. The upstream image documents these execution modes and receive scheduling in its [README](https://github.com/bbernhard/signal-cli-rest-api#execution-modes). Record the image tag/digest and CLI version you test; `latest` can change.
 
-If the server is remote, access the loopback API through SSH rather than publishing port 8080. For example, from your laptop use `ssh -L 8080:127.0.0.1:8080 user@server` and keep that session open. All registration commands below run on the server or through that tunnel.
+For a remote server, keep `ssh -L 8080:127.0.0.1:8080 user@server` open on your laptop to access the loopback API. Run registration commands on the server or through that tunnel.
 
 ## 3. Register and verify the dedicated number
 
@@ -96,7 +96,7 @@ set +a
 .venv/bin/python run_bot.py --check-account-ready
 ```
 
-Diagnostics inspect local files; they do not prove that a live send or model request will succeed. They expect `signal-data/data/accounts.json`, a matching account entry, and an account state file marked `registered=true`. Upstream storage formats can change. Review failures locally rather than publishing account data or diagnostic output.
+Diagnostics check local `signal-data/data/accounts.json`, a matching account entry, and `registered=true` state; they do not test live messaging or inference. Storage formats can change. Keep diagnostic output private; see the [account layout](CONFIGURATION.md#account-storage-layout).
 
 ## 5. Understand and check the message transport
 
@@ -111,7 +111,7 @@ The container also exposes these upstream HTTP routes:
 | Send a message | `POST /v2/send` |
 | Receive in normal/native mode | `GET /v1/receive/{number}` |
 
-In daemon modes, upstream receive behavior differs and can use WebSockets. This bot uses the non-daemon direct CLI transport described in [ARCHITECTURE.md](ARCHITECTURE.md).
+Daemon modes can use WebSocket receive behavior. This bot requires the direct CLI transport in [architecture](ARCHITECTURE.md).
 
 For an optional one-time HTTP send check, set `SIGNAL_TEST_RECIPIENT` to a consenting recipient's E.164 number, then run:
 
@@ -129,7 +129,7 @@ docker exec "$SIGNAL_CONTAINER_NAME" "$SIGNAL_CLI_BINARY" \
   receive -t 5 --ignore-attachments --ignore-stories --ignore-avatars --ignore-stickers
 ```
 
-Run that manually only while the bot is stopped. Receiving consumes pending messages, so messages read during a setup check will not later appear as new messages to the bot. Do not poll the REST receive route and CLI simultaneously. Normal bot sends use CLI `send --message ...` with either a recipient or `--group-id`; no HTTP send endpoint needs to be configured in Python.
+Run manual receive only with the bot stopped: it consumes messages that would otherwise reach the bot. Use one receiver. Normal replies use CLI `send --message ...` with a recipient or `--group-id`; Python needs no HTTP send URL.
 
 ## 6. Configure Ollama and start
 
@@ -141,17 +141,21 @@ curl -fsS http://localhost:11434/api/tags
 ./start_bot.sh
 ```
 
-Use the configured model name and URL if you changed the defaults. Send a direct message from a separate Signal account and verify a reply. From an administrator account, try `/bot status`. Add the bot to a group and mention `@Assistant` (or the configured mention name) to test group routing. Group IDs come from incoming messages and do not need to be hardcoded.
+Adapt the model/URL if you changed the defaults. Verify a direct-message reply from a separate account, `/bot status` from an administrator, and a group reply to `@Assistant` (or your mention name). Group IDs come from incoming messages automatically.
 
 ```bash
 ./stop_bot.sh
 ```
 
-The stop script stops this checkout's background process and container, removes its log, and attempts attachment/send-log cleanup. Account identity remains. This is not complete history deletion or secure erasure. For foreground mode, export `.env`, ensure the container is running, and run `.venv/bin/python run_bot.py`; press Ctrl-C to end the foreground Python process, then use the stop script for its container and cleanup steps.
+The stop script stops this checkout's background process and container and attempts runtime cleanup, preserving account identity. See [cleanup limits](CONFIGURATION.md#private-local-files).
+
+For foreground mode, export `.env`, start the container, and run `.venv/bin/python run_bot.py`. Press Ctrl-C to stop Python, then run the stop script for container shutdown and cleanup.
+
+For manual maintenance after stopping, use `docker start signal-assistant-api` to bring up only the container; leave the Python bot stopped.
 
 ## Alternative: link an existing account
 
-Instead of registration and SMS verification, a supported linked-device setup can use `http://localhost:8080/v1/qrcodelink?device_name=signal-assistant` and scan it in the mobile app's linked-device settings. This is a different account arrangement from the dedicated-number deployment. Continue with identifier discovery and diagnostics; the implementation still expects the local account layout described above.
+To link an existing account instead of registering a dedicated number, open `http://localhost:8080/v1/qrcodelink?device_name=signal-assistant` and scan it from the mobile app's linked-device settings. Continue with identifier discovery and diagnostics; the same local account layout is required.
 
 ## Troubleshooting
 
